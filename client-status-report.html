@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Client Status Reports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    color-scheme:dark;
+    /* base palette (dark SaaS dashboard) */
+    --primary:#3b82f6; --primary-600:#2563eb; --on-primary:#ffffff;
+    --accent:#10b981;
+    --bg:#0a0f1d; --surface:#121b30; --surface-2:#0e1627;
+    --fg:#e9eef9; --muted:#9fb0cc; --faint:#5f7191;
+    --border:#23304b; --border-strong:#33456a;
+    --danger:#f87171; --danger-soft:#3a1d22;
+    --ring:rgba(59,130,246,.5);
+    /* radii + elevation scale */
+    --r-sm:8px; --r:12px; --r-lg:16px; --r-xl:20px;
+    --sh-1:0 1px 2px rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.35);
+    --sh-2:0 4px 12px rgba(0,0,0,.45), 0 12px 30px rgba(0,0,0,.4);
+    --sh-3:0 20px 50px rgba(0,0,0,.6);
+    /* per-client theme (set by JS) */
+    --brand-primary:#3b82f6; --brand-accent:#7c3aed;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { -webkit-text-size-adjust:100%; background:var(--bg); color-scheme:dark; }
+  body {
+    font-family:'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background:transparent; color:var(--fg); line-height:1.55; font-size:15px;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  /* animated aurora backdrop */
+  .aurora { position:fixed; inset:-12%; z-index:-1; pointer-events:none; filter:blur(6px);
+    background:
+      radial-gradient(30rem 30rem at 14% 8%, rgba(37,99,235,.18), transparent 60%),
+      radial-gradient(28rem 28rem at 86% 14%, rgba(124,58,237,.16), transparent 60%),
+      radial-gradient(34rem 34rem at 82% 92%, rgba(5,150,105,.14), transparent 60%),
+      radial-gradient(26rem 26rem at 8% 88%, rgba(14,165,233,.13), transparent 60%);
+    animation:aurora 16s ease-in-out infinite alternate;
+  }
+  @keyframes aurora { 0%{transform:translate3d(0,0,0) scale(1) rotate(0deg);} 100%{transform:translate3d(0,-3%,0) scale(1.08) rotate(2deg);} }
+  .ic { display:inline-block; vertical-align:middle; flex-shrink:0; }
+  .tnum { font-variant-numeric:tabular-nums; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar {
+    position:sticky; top:0; z-index:50; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    padding:0 22px; height:58px; background:rgba(255,255,255,.82); backdrop-filter:saturate(1.4) blur(10px);
+    border-bottom:1px solid var(--border);
+  }
+  .brandmark { display:flex; align-items:center; gap:10px; font-weight:800; font-size:15px; letter-spacing:-.01em; }
+  .brandmark .logo { width:32px; height:32px; border-radius:9px; background:linear-gradient(135deg,var(--primary),#6366f1); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(37,99,235,.35); }
+  .toolbar .spacer { flex:1; }
+
+  .btn {
+    appearance:none; border:1px solid var(--border-strong); background:var(--surface); color:var(--fg);
+    font-family:inherit; font-size:13.5px; font-weight:600; padding:8px 14px; border-radius:10px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
+    transition:background .18s, border-color .18s, color .18s, box-shadow .18s, transform .06s;
+  }
+  .btn .ic { width:16px; height:16px; }
+  .btn:hover { border-color:var(--primary); color:var(--primary); background:#fafbff; }
+  .btn:focus-visible { outline:none; box-shadow:0 0 0 3px var(--ring); }
+  .btn:active { transform:translateY(.5px); }
+  .btn.primary { background:var(--primary); border-color:var(--primary); color:var(--on-primary); box-shadow:0 2px 8px rgba(37,99,235,.28); }
+  .btn.primary:hover { background:var(--primary-600); border-color:var(--primary-600); color:#fff; }
+  .btn.ghost { background:transparent; border-color:transparent; color:var(--muted); }
+  .btn.ghost:hover { background:#eef2fb; color:var(--fg); }
+  .btn.lg { padding:11px 20px; font-size:14.5px; }
+
+  .icon-btn {
+    border:none; background:transparent; cursor:pointer; color:var(--faint); border-radius:8px;
+    width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center;
+    transition:background .15s, color .15s;
+  }
+  .icon-btn .ic { width:16px; height:16px; }
+  .icon-btn:hover { background:#eef2fb; color:var(--fg); }
+  .icon-btn:focus-visible { outline:none; box-shadow:0 0 0 3px var(--ring); }
+  .icon-btn.danger:hover { background:var(--danger-soft); color:var(--danger); }
+
+  .wrap { max-width:1180px; margin:22px auto; padding:0 22px 64px; }
+
+  /* ---------- Generic card ---------- */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--sh-1); overflow:hidden; }
+  .card-head { display:flex; align-items:center; gap:9px; padding:16px 20px 4px; }
+  .card-head .hd-ic { width:30px; height:30px; border-radius:8px; background:#eef2fb; color:var(--primary); display:flex; align-items:center; justify-content:center; }
+  .card-head h3 { font-size:14.5px; font-weight:800; letter-spacing:-.01em; }
+
+  /* ---------- Branding form ---------- */
+  .brand-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px; padding:14px 20px 8px; }
+  .field label { display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:7px; letter-spacing:.01em; }
+  .field input[type=text], .field input[type=date], .field textarea {
+    width:100%; border:1px solid var(--border-strong); border-radius:10px; padding:10px 12px;
+    font-size:13.5px; font-family:inherit; color:var(--fg); background:var(--surface-2); transition:border-color .15s, box-shadow .15s, background .15s;
+  }
+  .field input:hover, .field textarea:hover { border-color:#c4d2e8; }
+  .field input:focus, .field textarea:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--ring); background:#fff; }
+  .color-row { display:flex; gap:8px; align-items:center; }
+  .color-row input[type=color] { width:44px; height:40px; border:1px solid var(--border-strong); border-radius:9px; background:#fff; cursor:pointer; padding:3px; }
+  .logo-drop { border:1.5px dashed var(--border-strong); border-radius:11px; padding:14px; text-align:center; font-size:12px; color:var(--muted); cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:8px; min-height:66px; justify-content:center; transition:border-color .15s, color .15s, background .15s; }
+  .logo-drop:hover { border-color:var(--primary); color:var(--primary); background:#fafbff; }
+  .logo-drop img { max-height:46px; max-width:100%; object-fit:contain; }
+  .form-foot { display:flex; align-items:center; gap:12px; padding:8px 20px 20px; flex-wrap:wrap; }
+  .form-foot .hint { font-size:12.5px; color:var(--muted); max-width:520px; }
+
+  /* ---------- Section title ---------- */
+  .section-title { font-size:17px; font-weight:800; margin:30px 2px 14px; display:flex; align-items:center; gap:9px; letter-spacing:-.02em; }
+  .section-title .st-ic { color:var(--primary); display:flex; }
+  .section-title .pill { font-size:12px; font-weight:700; color:var(--primary); background:#e8f0fe; padding:2px 10px; border-radius:20px; }
+
+  /* ---------- Clients grid ---------- */
+  .clients-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:16px; }
+  .client-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--sh-1); cursor:pointer; transition:transform .18s, box-shadow .18s, border-color .18s; overflow:hidden; position:relative; }
+  .client-card:hover { transform:translateY(-3px); box-shadow:var(--sh-2); border-color:var(--border-strong); }
+  .client-card:focus-visible { outline:none; box-shadow:0 0 0 3px var(--ring); }
+  .client-banner { height:74px; display:flex; align-items:center; padding:0 18px; gap:13px; position:relative; }
+  .client-banner::after { content:""; position:absolute; inset:0; background:radial-gradient(120% 140% at 85% -20%, rgba(255,255,255,.28), transparent 60%); }
+  .client-logo { width:46px; height:46px; border-radius:11px; background:rgba(255,255,255,.24); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; box-shadow:inset 0 0 0 1px rgba(255,255,255,.35); z-index:1; }
+  .client-logo img { max-width:100%; max-height:100%; object-fit:contain; }
+  .client-logo span { color:#fff; font-weight:800; font-size:19px; }
+  .client-banner .cname { color:#fff; font-weight:800; font-size:15.5px; letter-spacing:-.01em; text-shadow:0 1px 3px rgba(0,0,0,.22); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; z-index:1; }
+  .client-body { padding:14px 18px 16px; }
+  .client-body .ctitle { font-size:13.5px; font-weight:600; color:var(--fg); margin-bottom:11px; }
+  .mini-stats { display:flex; gap:7px; flex-wrap:wrap; }
+  .mini { font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:20px; background:var(--surface-2); border:1px solid var(--border); color:var(--muted); display:inline-flex; align-items:center; gap:5px; }
+  .mini .ic { width:13px; height:13px; }
+  .client-actions { display:flex; gap:4px; position:absolute; top:9px; right:9px; z-index:2; }
+  .client-actions .icon-btn { background:rgba(255,255,255,.9); color:#475569; backdrop-filter:blur(4px); }
+  .client-actions .icon-btn:hover { background:#fff; color:var(--danger); }
+  .empty-state { text-align:center; padding:54px 20px; color:var(--muted); }
+  .empty-ic { width:64px; height:64px; border-radius:16px; background:#eef2fb; color:var(--primary); display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+  .empty-ic .ic { width:30px; height:30px; }
+
+  /* ---------- Report header ---------- */
+  .report-header { color:#fff; border-radius:var(--r-xl); padding:28px 32px; display:flex; align-items:center; gap:22px; box-shadow:var(--sh-2); position:relative; overflow:hidden; }
+  .report-header::after { content:""; position:absolute; inset:0; background:radial-gradient(80% 120% at 90% -30%, rgba(255,255,255,.22), transparent 55%); pointer-events:none; }
+  .report-header .logo-box { width:66px; height:66px; border-radius:15px; background:rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(255,255,255,.3); z-index:1; }
+  .report-header .logo-box img { max-width:100%; max-height:100%; object-fit:contain; }
+  .report-header .logo-box span { font-size:25px; font-weight:800; }
+  .report-header .title-wrap { flex:1; min-width:0; z-index:1; }
+  .report-header .client { font-size:12.5px; font-weight:700; opacity:.92; text-transform:uppercase; letter-spacing:.12em; }
+  .report-header h1 { font-size:27px; font-weight:800; margin:3px 0 6px; letter-spacing:-.02em; }
+  .report-header .meta { font-size:13px; opacity:.94; display:flex; flex-wrap:wrap; gap:8px 18px; }
+  .report-header .meta span { display:inline-flex; align-items:center; gap:6px; }
+  .report-header .meta .ic { width:14px; height:14px; opacity:.9; }
+  .report-header .hdr-actions { display:flex; flex-direction:column; gap:8px; z-index:1; }
+  .report-header .hdr-actions .btn { background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.28); color:#fff; backdrop-filter:blur(4px); }
+  .report-header .hdr-actions .btn:hover { background:rgba(255,255,255,.28); border-color:rgba(255,255,255,.4); color:#fff; }
+
+  /* ---------- Summary stat cards ---------- */
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:18px 0 4px; }
+  .stat { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:16px 18px; box-shadow:var(--sh-1); cursor:pointer; transition:transform .18s, box-shadow .18s, border-color .18s; display:flex; flex-direction:column; gap:11px; }
+  .stat:hover { transform:translateY(-3px); border-color:var(--c); box-shadow:var(--sh-2); }
+  .stat:focus-visible { outline:none; box-shadow:0 0 0 3px var(--ring); }
+  .stat-top { display:flex; align-items:center; justify-content:space-between; }
+  .stat-chip { width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; }
+  .stat-chip .ic { width:20px; height:20px; }
+  .stat-go { color:var(--faint); display:flex; transition:transform .18s, color .18s; }
+  .stat:hover .stat-go { transform:translate(2px,-2px); color:var(--c); }
+  .stat .n { font-size:28px; font-weight:800; line-height:1; letter-spacing:-.02em; }
+  .stat .l { font-size:13px; color:var(--muted); font-weight:600; }
+  @media (max-width:760px){ .stats{grid-template-columns:repeat(2,1fr);} }
+
+  /* ---------- Reports bar ---------- */
+  .reports-bar { display:flex; align-items:center; justify-content:space-between; margin:26px 2px 14px; }
+  .reports-bar .t { font-size:17px; font-weight:800; display:flex; align-items:center; gap:9px; letter-spacing:-.02em; }
+  .reports-bar .t .st-ic { color:var(--primary); display:flex; }
+  .reports-bar .pill { font-size:12px; font-weight:700; color:var(--primary); background:#e8f0fe; padding:2px 10px; border-radius:20px; }
+
+  /* ---------- Report cards ---------- */
+  .reports-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:18px; }
+  .report-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--sh-1); padding:18px 20px 20px; transition:box-shadow .18s, border-color .18s; }
+  .report-card:hover { box-shadow:var(--sh-2); }
+  .rc-head { display:flex; align-items:center; gap:9px; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--border); }
+  .rc-cal { width:30px; height:30px; border-radius:8px; background:#eef2fb; color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .rc-cal .ic { width:16px; height:16px; }
+  .rc-head input[type=date] { border:1px solid var(--border-strong); border-radius:9px; padding:7px 10px; font-size:13px; font-family:inherit; font-weight:700; color:var(--fg); background:var(--surface-2); font-variant-numeric:tabular-nums; transition:border-color .15s, box-shadow .15s; }
+  .rc-head input[type=date]:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--ring); background:#fff; }
+  .rc-head input[type=text] { flex:1; min-width:0; border:1px solid transparent; border-radius:9px; padding:7px 10px; font-size:14px; font-weight:700; font-family:inherit; color:var(--fg); background:transparent; transition:background .15s, box-shadow .15s; }
+  .rc-head input[type=text]::placeholder { color:var(--faint); font-weight:600; }
+  .rc-head input[type=text]:hover { background:var(--surface-2); }
+  .rc-head input[type=text]:focus { outline:none; box-shadow:0 0 0 3px var(--ring); background:#fff; }
+
+  .rc-sec { margin-bottom:16px; }
+  .rc-sec:last-child { margin-bottom:0; }
+  .rc-label { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; margin-bottom:8px; letter-spacing:-.01em; }
+  .rc-ic { width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .rc-ic .ic { width:14px; height:14px; }
+  .rc-sec textarea { width:100%; border:1px solid var(--border-strong); border-radius:10px; padding:9px 11px; font-size:13.5px; font-family:inherit; color:var(--fg); background:var(--surface-2); resize:none; overflow:hidden; min-height:42px; line-height:1.55; transition:border-color .15s, box-shadow .15s, background .15s; }
+  .rc-sec textarea:hover { border-color:#c4d2e8; }
+  .rc-sec textarea:focus { outline:none; border-color:var(--brand-primary); box-shadow:0 0 0 3px var(--ring); background:#fff; }
+  .rc-sec textarea::placeholder { color:var(--faint); }
+
+  .empty-reports { grid-column:1/-1; text-align:center; padding:52px 20px; color:var(--muted); border:1.5px dashed var(--border-strong); border-radius:var(--r-lg); background:var(--surface-2); }
+
+  /* ---------- Modals ---------- */
+  .modal-bg { position:fixed; inset:0; background:rgba(15,23,42,.5); display:none; align-items:center; justify-content:center; z-index:100; padding:18px; backdrop-filter:blur(2px); }
+  .modal-bg.show { display:flex; animation:fadein .18s ease; }
+  .modal { background:#fff; border-radius:var(--r-xl); width:100%; max-width:460px; padding:24px; box-shadow:var(--sh-3); animation:pop .2s cubic-bezier(.2,.9,.3,1.2); }
+  .modal h3 { font-size:18px; font-weight:800; margin-bottom:18px; letter-spacing:-.02em; display:flex; align-items:center; gap:8px; }
+  .modal .field { margin-bottom:14px; }
+  .modal .row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  @keyframes fadein { from{opacity:0} to{opacity:1} }
+  @keyframes pop { from{opacity:0; transform:translateY(8px) scale(.98)} to{opacity:1; transform:none} }
+
+  /* ---------- Aggregate drill-down ---------- */
+  .agg-ic { display:inline-flex; }
+  .agg-group { margin-bottom:18px; }
+  .agg-rep { font-size:13px; font-weight:700; color:var(--fg); background:var(--surface-2); border:1px solid var(--border); padding:9px 12px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:8px; transition:background .15s, border-color .15s; }
+  .agg-rep:hover { background:#eef2fb; border-color:var(--border-strong); }
+  .agg-rep .cal { color:var(--primary); display:flex; }
+  .agg-rep .cal .ic { width:14px; height:14px; }
+  .agg-jump { margin-left:auto; font-size:11.5px; font-weight:700; color:var(--primary); display:inline-flex; align-items:center; gap:3px; }
+  .agg-jump .ic { width:13px; height:13px; }
+  .agg-group ul { margin:9px 0 0; padding-left:8px; list-style:none; }
+  .agg-group li { font-size:13.5px; margin:7px 0; line-height:1.5; padding-left:18px; position:relative; }
+  .agg-group li::before { content:""; position:absolute; left:4px; top:8px; width:6px; height:6px; border-radius:50%; background:var(--c,#94a3b8); }
+  .agg-empty { text-align:center; color:var(--muted); font-size:13.5px; padding:34px 12px; }
+
+  .foot { text-align:center; color:var(--faint); font-size:12px; margin-top:30px; }
+  .hidden { display:none !important; }
+  @media (max-width:760px){ .reports-grid{grid-template-columns:1fr;} .report-header{flex-wrap:wrap;} }
+
+  /* ---------- Motion / entrance ---------- */
+  @keyframes rise { from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;} }
+  @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+  @keyframes floaty { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-5px);} }
+  @keyframes drift { 0%,100%{transform:translate(0,0);} 50%{transform:translate(-16px,14px);} }
+  @keyframes shimmer { 0%{transform:translateX(-130%) skewX(-12deg);} 100%{transform:translateX(360%) skewX(-12deg);} }
+  @keyframes glowPulse { 0%,100%{opacity:.85;} 50%{opacity:.45;} }
+
+  .easing { animation-timing-function:cubic-bezier(.2,.7,.3,1); }
+  #homeView .card { animation:rise .55s cubic-bezier(.2,.7,.3,1) both; }
+  #homeView .section-title { animation:rise .55s .06s cubic-bezier(.2,.7,.3,1) both; }
+  #homeView .empty-state { animation:fadeIn .6s .12s both; }
+  .report-header { animation:rise .55s cubic-bezier(.2,.7,.3,1) both; }
+  .stats { animation:rise .55s .05s cubic-bezier(.2,.7,.3,1) both; }
+  .reports-bar { animation:rise .55s .1s cubic-bezier(.2,.7,.3,1) both; }
+
+  /* staggered grid entrances */
+  .client-card, .report-card { animation:rise .5s cubic-bezier(.2,.7,.3,1) both; }
+  .client-card:nth-child(1),.report-card:nth-child(1){animation-delay:.02s}
+  .client-card:nth-child(2),.report-card:nth-child(2){animation-delay:.07s}
+  .client-card:nth-child(3),.report-card:nth-child(3){animation-delay:.12s}
+  .client-card:nth-child(4),.report-card:nth-child(4){animation-delay:.17s}
+  .client-card:nth-child(5),.report-card:nth-child(5){animation-delay:.22s}
+  .client-card:nth-child(6),.report-card:nth-child(6){animation-delay:.27s}
+  .client-card:nth-child(n+7),.report-card:nth-child(n+7){animation-delay:.3s}
+
+  /* floating accents */
+  .brandmark .logo { animation:floaty 5s ease-in-out infinite; }
+  .empty-ic { animation:floaty 4.5s ease-in-out infinite; }
+
+  /* animated header glow */
+  .report-header::before { content:""; position:absolute; width:320px; height:320px; border-radius:50%; top:-150px; right:-40px; background:radial-gradient(closest-side, rgba(255,255,255,.22), transparent 70%); animation:drift 9s ease-in-out infinite; pointer-events:none; }
+  .report-header::after { animation:glowPulse 6s ease-in-out infinite; }
+
+  /* flowing gradient accent bar on top of cards */
+  .card, .report-card { position:relative; }
+  .card::before, .report-card::before {
+    content:""; position:absolute; top:0; left:0; right:0; height:4px;
+    background:linear-gradient(90deg, var(--brand-primary,#2563eb), #7c3aed, var(--accent), var(--brand-primary,#2563eb));
+    background-size:300% 100%; animation:hueslide 7s linear infinite;
+    border-radius:var(--r-lg) var(--r-lg) 0 0; z-index:2;
+  }
+  .report-card::before { background:linear-gradient(90deg, var(--brand-primary), var(--brand-accent), var(--brand-primary)); background-size:200% 100%; }
+  @keyframes hueslide { to { background-position:300% 0; } }
+
+  /* pulsing ring on empty-state icon */
+  .empty-ic { position:relative; }
+  .empty-ic::after { content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:0 0 0 0 rgba(37,99,235,.35); animation:ring 2.4s ease-out infinite; }
+  @keyframes ring { 0%{box-shadow:0 0 0 0 rgba(37,99,235,.35);} 70%,100%{box-shadow:0 0 0 18px rgba(37,99,235,0);} }
+
+  /* shimmer sweep on primary buttons */
+  .btn.primary { position:relative; overflow:hidden; animation:btnGlow 3.2s ease-in-out infinite; }
+  @keyframes btnGlow { 0%,100%{box-shadow:0 2px 8px rgba(37,99,235,.28);} 50%{box-shadow:0 4px 20px rgba(37,99,235,.5);} }
+  .btn.primary > * { position:relative; z-index:1; }
+  .btn.primary::after { content:""; position:absolute; top:0; left:0; width:30%; height:100%; background:linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent); transform:translateX(-130%) skewX(-12deg); z-index:0; }
+  .btn.primary:hover::after { animation:shimmer .85s ease; }
+
+  /* chip nudge on hover */
+  .stat-chip { transition:transform .2s cubic-bezier(.2,.7,.3,1.4); }
+  .stat:hover .stat-chip { transform:scale(1.08) rotate(-3deg); }
+  .rc-cal, .stat-chip, .rc-ic { will-change:transform; }
+  .client-logo { transition:transform .25s cubic-bezier(.2,.7,.3,1.4); }
+  .client-card:hover .client-logo { transform:scale(1.06) rotate(-2deg); }
+
+  /* ===== dark-theme surface fixes (override hardcoded light values) ===== */
+  .toolbar { background:rgba(10,15,29,.72); }
+  .btn:hover { background:#1a2740; }
+  .btn.ghost:hover { background:#1a2740; color:var(--fg); }
+  .icon-btn:hover { background:#1c2942; }
+  .card-head .hd-ic, .empty-ic, .rc-cal { background:rgba(59,130,246,.16); color:var(--primary); }
+  .field input:focus, .field textarea:focus,
+  .rc-head input[type=date]:focus, .rc-sec textarea:focus { background:#0b1322; }
+  .field input:hover, .field textarea:hover, .rc-sec textarea:hover { border-color:#3c4f73; }
+  .logo-drop:hover { background:rgba(59,130,246,.08); }
+  .section-title .pill, .reports-bar .pill { background:rgba(59,130,246,.18); color:#8ab4ff; }
+  .rc-head input[type=text]:hover { background:var(--surface-2); }
+  .rc-head input[type=text]:focus { background:#0b1322; }
+  .modal { background:var(--surface); border:1px solid var(--border); }
+  .agg-rep:hover { background:#1c2942; }
+  .empty-ic::after { box-shadow:0 0 0 0 rgba(59,130,246,.45); animation:ring 2.4s ease-out infinite; }
+  @keyframes ring { 0%{box-shadow:0 0 0 0 rgba(59,130,246,.45);} 70%,100%{box-shadow:0 0 0 18px rgba(59,130,246,0);} }
+  .btn.primary { animation:btnGlowD 3.2s ease-in-out infinite; }
+  @keyframes btnGlowD { 0%,100%{box-shadow:0 2px 10px rgba(59,130,246,.4);} 50%{box-shadow:0 4px 24px rgba(59,130,246,.7);} }
+  /* brighter aurora glows on the dark canvas */
+  .aurora { filter:blur(22px); opacity:.95;
+    background:
+      radial-gradient(32rem 32rem at 14% 8%, rgba(37,99,235,.5), transparent 60%),
+      radial-gradient(30rem 30rem at 86% 14%, rgba(124,58,237,.45), transparent 60%),
+      radial-gradient(34rem 34rem at 82% 92%, rgba(16,185,129,.34), transparent 60%),
+      radial-gradient(28rem 28rem at 8% 88%, rgba(14,165,233,.42), transparent 60%);
+  }
+  .stat .n { text-shadow:0 0 18px currentColor; filter:saturate(1.15); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+  }
+
+  @media print {
+    /* force a clean light theme on paper */
+    :root { --fg:#0f172a; --muted:#475569; --faint:#64748b; --surface:#fff; --surface-2:#fff; --border:#e5e9f2; --border-strong:#dce3ee; }
+    html, body { background:#fff !important; }
+    body { font-size:13px; }
+    .aurora { display:none !important; }
+    .toolbar, .no-print { display:none !important; }
+    .wrap { margin:0; }
+    .report-card { color:#0f172a; }
+    .rc-label, .rc-head input { color:#0f172a !important; }
+    .stat .n { text-shadow:none !important; }
+    .report-card, .report-header { box-shadow:none; break-inside:avoid; }
+    .report-header { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .rc-sec textarea, .rc-head input { border-color:#e5e9f2 !important; background:#fff !important; color:#0f172a !important; }
+    body.print-single .reports-grid { display:block !important; }
+    body.print-single .report-card:not(.print-target) { display:none !important; }
+    body.print-single .report-card.print-target { margin:0; }
+  }
+</style>
+</head>
+<body>
+  <div class="aurora no-print" aria-hidden="true"></div>
+
+  <!-- Toolbar -->
+  <div class="toolbar no-print">
+    <div class="brandmark"><span class="logo" data-ic="dash" data-ic-size="18"></span> Client Status Reports</div>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="tbBack" data-ic="back" onclick="goHome()">All Clients</button>
+    <button class="btn ghost" data-ic="download" onclick="exportJSON()">Backup</button>
+    <button class="btn ghost" data-ic="upload" onclick="document.getElementById('importFile').click()">Restore</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(event)" />
+  </div>
+
+  <!-- ============ HOME / CLIENTS VIEW ============ -->
+  <div class="wrap" id="homeView">
+    <div class="card no-print">
+      <div class="card-head"><span class="hd-ic" data-ic="palette" data-ic-size="17"></span><h3>Client Branding &amp; Report Details</h3></div>
+      <div class="brand-grid">
+        <div class="field"><label>Client / Company Name</label><input type="text" id="b_client" placeholder="Acme Corp" /></div>
+        <div class="field"><label>Report Title</label><input type="text" id="b_title" placeholder="Status Report" /></div>
+        <div class="field"><label>Prepared By</label><input type="text" id="b_author" placeholder="Your name / agency" /></div>
+        <div class="field"><label>Default Report Date</label><input type="date" id="b_date" /></div>
+        <div class="field"><label>Primary Color</label>
+          <div class="color-row"><input type="color" id="b_primary" value="#2563eb" oninput="document.getElementById('b_primary_hex').value=this.value" />
+          <input type="text" id="b_primary_hex" value="#2563eb" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('b_primary').value=this.value" /></div>
+        </div>
+        <div class="field"><label>Accent Color</label>
+          <div class="color-row"><input type="color" id="b_accent" value="#7c3aed" oninput="document.getElementById('b_accent_hex').value=this.value" />
+          <input type="text" id="b_accent_hex" value="#7c3aed" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('b_accent').value=this.value" /></div>
+        </div>
+        <div class="field"><label>Logo (PNG / SVG / JPG)</label>
+          <div class="logo-drop" onclick="document.getElementById('logoFile').click()"><div id="logoPreview">Click to upload logo</div></div>
+          <input type="file" id="logoFile" accept="image/*" style="display:none" onchange="onNewLogo(event)" />
+        </div>
+      </div>
+      <div class="form-foot">
+        <button class="btn primary lg" data-ic="plus" onclick="createClient()">Create Client</button>
+        <button class="btn ghost" onclick="clearForm()">Clear</button>
+        <span class="hint">Create the client, then open it and click <b>Generate Report</b> to add dated reports inside.</span>
+      </div>
+    </div>
+
+    <div class="section-title"><span class="st-ic" data-ic="users" data-ic-size="19"></span> Your Clients <span class="pill" id="clientCount">0</span></div>
+    <div class="clients-grid" id="clientsGrid"></div>
+    <div class="empty-state hidden" id="clientsEmpty">
+      <div class="empty-ic" data-ic="users" data-ic-size="30"></div>
+      <div style="font-weight:800;color:var(--fg);font-size:15px;">No clients yet</div>
+      <div>Create your first client above to get started.</div>
+    </div>
+  </div>
+
+  <!-- ============ REPORT VIEW ============ -->
+  <div class="wrap hidden" id="reportView">
+    <div class="report-header" id="reportHeader">
+      <div class="logo-box" id="logoBox"><span id="logoInitial">A</span></div>
+      <div class="title-wrap">
+        <div class="client" id="rClient">CLIENT NAME</div>
+        <h1 id="rTitle">Status Report</h1>
+        <div class="meta"><span id="rAuthor">Prepared by —</span><span id="rDate" class="tnum">—</span></div>
+      </div>
+      <div class="hdr-actions no-print">
+        <button class="btn" data-ic="edit" onclick="editClientBrand()">Edit Branding</button>
+      </div>
+    </div>
+
+    <div class="stats no-print" id="stats"></div>
+
+    <div class="reports-bar no-print">
+      <div class="t"><span class="st-ic" data-ic="file" data-ic-size="19"></span> Reports <span class="pill" id="reportCount">0</span></div>
+      <button class="btn primary" data-ic="plus" onclick="generateReport()">Generate Report</button>
+    </div>
+
+    <div class="reports-grid" id="reportsGrid"></div>
+    <div class="foot">Generated with Client Status Reports · saved locally in your browser</div>
+  </div>
+
+  <!-- Aggregate drill-down modal -->
+  <div class="modal-bg" id="aggModalBg">
+    <div class="modal" style="max-width:560px;">
+      <h3 id="aggTitle">Summary</h3>
+      <div id="aggBody" style="max-height:62vh; overflow:auto; margin:-2px -4px 0; padding:0 4px;"></div>
+      <div class="modal-actions"><button class="btn ghost" onclick="closeAgg()">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Branding edit modal -->
+  <div class="modal-bg" id="brandModalBg">
+    <div class="modal">
+      <h3><span class="agg-ic" style="color:var(--primary)" data-ic="palette" data-ic-size="18"></span> Edit Client Branding</h3>
+      <div class="field"><label>Client / Company Name</label><input type="text" id="e_client" /></div>
+      <div class="field"><label>Report Title</label><input type="text" id="e_title" /></div>
+      <div class="row2">
+        <div class="field"><label>Prepared By</label><input type="text" id="e_author" /></div>
+        <div class="field"><label>Report Date</label><input type="date" id="e_date" /></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Primary Color</label><div class="color-row"><input type="color" id="e_primary" /><input type="text" id="e_primary_hex" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('e_primary').value=this.value" /></div></div>
+        <div class="field"><label>Accent Color</label><div class="color-row"><input type="color" id="e_accent" /><input type="text" id="e_accent_hex" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('e_accent').value=this.value" /></div></div>
+      </div>
+      <div class="field"><label>Logo</label>
+        <div class="logo-drop" onclick="document.getElementById('e_logoFile').click()"><div id="e_logoPreview">Click to upload logo</div></div>
+        <input type="file" id="e_logoFile" accept="image/*" style="display:none" onchange="onEditLogo(event)" />
+        <button class="btn ghost" style="margin-top:8px;font-size:12px;padding:5px 10px;" onclick="document.getElementById('e_logoPreview').innerHTML='Click to upload logo'; editLogoData='';">Remove logo</button>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" onclick="closeBrandModal()">Cancel</button><button class="btn primary" onclick="saveBrand()">Save</button></div>
+    </div>
+  </div>
+
+<script>
+  /* ---------- Inline SVG icon set (Lucide-style, stroke 1.75) ---------- */
+  const I = {
+    dash:'<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    back:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+    upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
+    plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+    edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    printer:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+    calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>',
+    file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/>',
+    clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    palette:'<circle cx="13.5" cy="6.5" r=".6" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".6" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".6" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.12a1.64 1.64 0 0 1 1.67-1.67h1.99c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2Z"/>',
+    upRight:'<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
+    check:'<path d="M21.8 10A10 10 0 1 1 17 3.34"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    arrowRight:'<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>',
+  };
+  function ic(name, size){ size=size||18; return '<svg class="ic" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+(I[name]||'')+'</svg>'; }
+
+  // The four narrative sections that live inside every report
+  const FIELDS = [
+    { key:'did',      name:'What We Did', icon:'check',      color:'#059669', ph:'Completed work, wins, deliverables shipped…' },
+    { key:'pending',  name:'Pending',     icon:'clock',      color:'#d97706', ph:'In progress / awaiting feedback or input…' },
+    { key:'next',     name:"What's Next", icon:'arrowRight', color:'#2563eb', ph:'Upcoming tasks and priorities…' },
+    { key:'blockers', name:'Blockers',    icon:'alert',      color:'#dc2626', ph:'Anything blocking progress / risks…' },
+  ];
+  const KEY = 'clientReports_v3';
+
+  let state = load();
+  let current = null;     // open client id, or null on home
+  let newLogoData = '';
+  let editLogoData = '';
+
+  function uid(){ return Math.random().toString(36).slice(2,9); }
+
+  function load(){
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(KEY)); } catch(e){}
+    if (!s) {
+      try {
+        const v2 = JSON.parse(localStorage.getItem('clientReports_v2'));
+        if (v2 && Array.isArray(v2.clients)) s = v2;
+        else {
+          const v1 = JSON.parse(localStorage.getItem('statusReportState_v1'));
+          if (v1 && v1.items) s = { clients:[ { id:uid(), brand:v1.brand, items:v1.items } ] };
+        }
+      } catch(e){}
+    }
+    if (!s || !Array.isArray(s.clients)) s = { clients: [] };
+    s.clients.forEach(migrateClient);
+    return s;
+  }
+  function migrateClient(c){
+    if (Array.isArray(c.reports)) return;
+    if (c.items) {
+      const conv = arr => (arr||[]).map(it => '• ' + it.title + (it.desc ? ' — ' + it.desc : '')).join('\n');
+      c.reports = [{ id:uid(), date: todayStr(), title:'',
+        did: conv(c.items.done), pending: conv(c.items.pending), next: conv(c.items.next), blockers: conv(c.items.blocker) }];
+      delete c.items;
+    } else {
+      c.reports = [];
+    }
+  }
+  function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+
+  /* ---------- Create-client form ---------- */
+  function onNewLogo(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ newLogoData=r.result; document.getElementById('logoPreview').innerHTML='<img src="'+r.result+'" />'; }; r.readAsDataURL(f); }
+  function clearForm(){
+    ['b_client','b_title','b_author'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('b_date').value = todayStr();
+    document.getElementById('b_primary').value='#2563eb'; document.getElementById('b_primary_hex').value='#2563eb';
+    document.getElementById('b_accent').value='#7c3aed'; document.getElementById('b_accent_hex').value='#7c3aed';
+    newLogoData=''; document.getElementById('logoPreview').innerHTML='Click to upload logo';
+  }
+  function createClient(){
+    const name = document.getElementById('b_client').value.trim();
+    if(!name){ alert('Please enter a client / company name first.'); document.getElementById('b_client').focus(); return; }
+    const brand = {
+      client: name,
+      title: document.getElementById('b_title').value.trim() || 'Status Report',
+      author: document.getElementById('b_author').value.trim(),
+      date: document.getElementById('b_date').value || todayStr(),
+      primary: document.getElementById('b_primary').value,
+      accent: document.getElementById('b_accent').value,
+      logo: newLogoData,
+    };
+    state.clients.unshift({ id:uid(), brand, reports: [] });
+    save(); clearForm(); renderClients();
+    document.getElementById('clientsGrid').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  /* ---------- Clients grid ---------- */
+  function renderClients(){
+    const grid = document.getElementById('clientsGrid');
+    document.getElementById('clientCount').textContent = state.clients.length;
+    document.getElementById('clientsEmpty').classList.toggle('hidden', state.clients.length>0);
+    grid.innerHTML = state.clients.map(c=>{
+      const b=c.brand; const n=(c.reports||[]).length;
+      const last = n ? fmtDate(c.reports[0].date) : '—';
+      const logo = b.logo ? '<img src="'+b.logo+'" />' : '<span>'+esc((b.client||'?').charAt(0).toUpperCase())+'</span>';
+      return '<div class="client-card" tabindex="0" onclick="openClient(\''+c.id+'\')" onkeydown="if(event.key===\'Enter\')openClient(\''+c.id+'\')">' +
+        '<div class="client-actions" onclick="event.stopPropagation()">' +
+          '<button class="icon-btn" title="Delete client" onclick="deleteClient(\''+c.id+'\')">'+ic('trash',15)+'</button></div>' +
+        '<div class="client-banner" style="background:linear-gradient(135deg,'+b.primary+','+b.accent+')">' +
+          '<div class="client-logo">'+logo+'</div><div class="cname">'+esc(b.client)+'</div></div>' +
+        '<div class="client-body"><div class="ctitle">'+esc(b.title||'Status Report')+'</div>' +
+          '<div class="mini-stats"><span class="mini">'+ic('file',13)+n+' report'+(n===1?'':'s')+'</span>' +
+          '<span class="mini">'+ic('clock',13)+last+'</span></div></div>' +
+      '</div>';
+    }).join('');
+  }
+  function deleteClient(cid){
+    const c = state.clients.find(x=>x.id===cid);
+    if(!confirm('Delete "'+(c?c.brand.client:'')+'" and all its reports? This cannot be undone.')) return;
+    state.clients = state.clients.filter(x=>x.id!==cid); save(); renderClients();
+  }
+
+  /* ---------- Open / report view ---------- */
+  function openClient(cid){
+    current = cid; applyBrand();
+    statsAnimate=true; renderReports(); statsAnimate=false;
+    document.getElementById('homeView').classList.add('hidden');
+    document.getElementById('reportView').classList.remove('hidden');
+    document.getElementById('tbBack').style.display='inline-flex';
+    window.scrollTo(0,0);
+  }
+  function goHome(){
+    current = null; renderClients();
+    document.getElementById('reportView').classList.add('hidden');
+    document.getElementById('homeView').classList.remove('hidden');
+    document.getElementById('tbBack').style.display='none';
+    window.scrollTo(0,0);
+  }
+  function getCur(){ return state.clients.find(x=>x.id===current); }
+
+  function applyBrand(){
+    const c=getCur(); if(!c) return; const b=c.brand;
+    document.documentElement.style.setProperty('--brand-primary', b.primary);
+    document.documentElement.style.setProperty('--brand-accent', b.accent);
+    document.getElementById('reportHeader').style.background='linear-gradient(135deg,'+b.primary+','+b.accent+')';
+    document.getElementById('rClient').textContent=(b.client||'Client').toUpperCase();
+    document.getElementById('rTitle').textContent=b.title||'Status Report';
+    document.getElementById('rAuthor').innerHTML=ic('edit',14)+(b.author?('Prepared by '+esc(b.author)):'Prepared by —');
+    document.getElementById('rDate').innerHTML=ic('calendar',14)+(b.date?fmtDate(b.date):fmtDate(todayStr()));
+    const box=document.getElementById('logoBox');
+    box.innerHTML = b.logo ? '<img src="'+b.logo+'" />' : '<span>'+esc((b.client||'A').trim().charAt(0).toUpperCase())+'</span>';
+  }
+
+  /* ---------- Reports (dated entries) ---------- */
+  function generateReport(){
+    const c=getCur(); if(!c) return;
+    c.reports.unshift({ id:uid(), date: todayStr(), title:'', did:'', pending:'', next:'', blockers:'' });
+    save(); renderReports();
+    const first=document.querySelector('.report-card'); if(first){ first.scrollIntoView({behavior:'smooth',block:'center'}); }
+  }
+  function renderReports(){
+    const c=getCur(); if(!c) return;
+    const grid=document.getElementById('reportsGrid');
+    document.getElementById('reportCount').textContent=c.reports.length;
+    if(!c.reports.length){
+      grid.innerHTML='<div class="empty-reports"><div class="empty-ic" style="margin:0 auto 14px">'+ic('file',30)+'</div>'+
+        '<div style="font-weight:800;color:var(--fg);font-size:15px;">No reports yet</div>'+
+        '<div>Click <b>Generate Report</b> to create your first dated report.</div></div>';
+      renderStats(); return;
+    }
+    grid.innerHTML=c.reports.map(r=>reportCardHTML(r)).join('');
+    grid.querySelectorAll('textarea').forEach(autoGrow);
+    renderStats();
+  }
+
+  function entriesFor(r, key){ return (r[key]||'').split('\n').map(s=>s.trim()).filter(Boolean); }
+  let statsAnimate=false;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function countUp(el, to){
+    if(reduceMotion || to===0){ el.textContent=to; return; }
+    const dur=620, start=performance.now();
+    function step(t){ const p=Math.min(1,(t-start)/dur); el.textContent=Math.round(to*(1-Math.pow(1-p,3))); if(p<1) requestAnimationFrame(step); }
+    requestAnimationFrame(step);
+  }
+  function renderStats(){
+    const c=getCur(); if(!c) return;
+    const vals = FIELDS.map(f=>{ let n=0; c.reports.forEach(r=> n += entriesFor(r,f.key).length ); return n; });
+    document.getElementById('stats').innerHTML = FIELDS.map((f,i)=>
+      '<div class="stat" style="--c:'+f.color+'" tabindex="0" onclick="openAggregate(\''+f.key+'\')" onkeydown="if(event.key===\'Enter\')openAggregate(\''+f.key+'\')">' +
+        '<div class="stat-top"><span class="stat-chip" style="background:'+f.color+'1f;color:'+f.color+'">'+ic(f.icon,20)+'</span>' +
+          '<span class="stat-go">'+ic('upRight',15)+'</span></div>' +
+        '<div class="n" style="color:'+f.color+'">'+vals[i]+'</div>' +
+        '<div class="l">'+esc(f.name)+'</div>' +
+      '</div>'
+    ).join('');
+    if(statsAnimate) document.querySelectorAll('#stats .n').forEach((el,i)=> countUp(el, vals[i]));
+  }
+
+  function openAggregate(key){
+    const c=getCur(); if(!c) return;
+    const f=FIELDS.find(x=>x.key===key);
+    let html='', total=0;
+    c.reports.forEach(r=>{
+      const lines=entriesFor(r,key); if(!lines.length) return;
+      total+=lines.length;
+      const label=fmtDate(r.date)+(r.title?' · '+esc(r.title):'');
+      html += '<div class="agg-group" style="--c:'+f.color+'">' +
+        '<div class="agg-rep" onclick="jumpToReport(\''+r.id+'\')"><span class="cal">'+ic('calendar',14)+'</span>'+label +
+          '<span class="agg-jump">open report '+ic('upRight',13)+'</span></div>' +
+        '<ul>'+lines.map(l=>'<li>'+esc(l)+'</li>').join('')+'</ul></div>';
+    });
+    if(!total) html='<div class="agg-empty">Nothing logged under <b>'+esc(f.name)+'</b> across any report yet.</div>';
+    document.getElementById('aggTitle').innerHTML='<span class="agg-ic" style="color:'+f.color+'">'+ic(f.icon,18)+'</span> '+esc(f.name)+
+      ' <span style="color:var(--muted);font-weight:600;font-size:14px;">· '+total+' item'+(total===1?'':'s')+' across '+c.reports.length+' report'+(c.reports.length===1?'':'s')+'</span>';
+    document.getElementById('aggBody').innerHTML=html;
+    document.getElementById('aggModalBg').classList.add('show');
+  }
+  function jumpToReport(rid){
+    closeAgg();
+    const el=document.getElementById('rc-'+rid); if(!el) return;
+    el.scrollIntoView({behavior:'smooth',block:'center'});
+    el.style.transition='box-shadow .3s'; el.style.boxShadow='0 0 0 3px var(--brand-primary)';
+    setTimeout(()=>{ el.style.boxShadow=''; },1500);
+  }
+  function closeAgg(){ document.getElementById('aggModalBg').classList.remove('show'); }
+
+  function reportCardHTML(r){
+    const secs = FIELDS.map(f =>
+      '<div class="rc-sec">' +
+        '<div class="rc-label"><span class="rc-ic" style="background:'+f.color+'1f;color:'+f.color+'">'+ic(f.icon,14)+'</span>'+esc(f.name)+'</div>' +
+        '<textarea placeholder="'+f.ph+'" oninput="updateField(\''+r.id+'\',\''+f.key+'\',this.value); autoGrow(this);">'+esc(r[f.key]||'')+'</textarea>' +
+      '</div>'
+    ).join('');
+    return '<div class="report-card" id="rc-'+r.id+'">' +
+      '<div class="rc-head">' +
+        '<span class="rc-cal">'+ic('calendar',16)+'</span>' +
+        '<input type="date" value="'+esc(r.date||'')+'" onchange="updateMeta(\''+r.id+'\',\'date\',this.value)" />' +
+        '<input type="text" placeholder="Label (e.g. Week 12, Sprint 3)" value="'+esc(r.title||'')+'" oninput="updateMeta(\''+r.id+'\',\'title\',this.value)" />' +
+        '<button class="icon-btn no-print" title="Export this report as PDF" onclick="printReport(\''+r.id+'\')">'+ic('printer',16)+'</button>' +
+        '<button class="icon-btn danger no-print" title="Delete report" onclick="deleteReport(\''+r.id+'\')">'+ic('trash',16)+'</button>' +
+      '</div>' + secs +
+    '</div>';
+  }
+  function updateField(rid, key, val){ const r=getCur().reports.find(x=>x.id===rid); if(r){ r[key]=val; save(); renderStats(); } }
+  function updateMeta(rid, key, val){ const r=getCur().reports.find(x=>x.id===rid); if(r){ r[key]=val; save(); } }
+  function deleteReport(rid){
+    if(!confirm('Delete this report?')) return;
+    const c=getCur(); c.reports=c.reports.filter(x=>x.id!==rid); save(); renderReports();
+  }
+  function autoGrow(el){ el.style.height='auto'; el.style.height=(el.scrollHeight+2)+'px'; }
+
+  /* ---------- Single-report export ---------- */
+  function printReport(rid){
+    const card=document.getElementById('rc-'+rid); if(!card) return;
+    document.querySelectorAll('.report-card.print-target').forEach(el=>el.classList.remove('print-target'));
+    card.classList.add('print-target');
+    document.body.classList.add('print-single');
+    const cleanup=()=>{ document.body.classList.remove('print-single'); card.classList.remove('print-target'); window.removeEventListener('afterprint',cleanup); };
+    window.addEventListener('afterprint',cleanup);
+    window.print();
+  }
+
+  /* ---------- Edit branding modal ---------- */
+  function editClientBrand(){
+    const b=getCur().brand; editLogoData=b.logo||'';
+    document.getElementById('e_client').value=b.client; document.getElementById('e_title').value=b.title;
+    document.getElementById('e_author').value=b.author; document.getElementById('e_date').value=b.date;
+    document.getElementById('e_primary').value=b.primary; document.getElementById('e_primary_hex').value=b.primary;
+    document.getElementById('e_accent').value=b.accent; document.getElementById('e_accent_hex').value=b.accent;
+    document.getElementById('e_logoPreview').innerHTML=b.logo?'<img src="'+b.logo+'" />':'Click to upload logo';
+    document.getElementById('brandModalBg').classList.add('show');
+  }
+  function onEditLogo(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{editLogoData=r.result; document.getElementById('e_logoPreview').innerHTML='<img src="'+r.result+'" />';}; r.readAsDataURL(f); }
+  function closeBrandModal(){ document.getElementById('brandModalBg').classList.remove('show'); }
+  function saveBrand(){
+    const b=getCur().brand;
+    b.client=document.getElementById('e_client').value.trim()||'Client';
+    b.title=document.getElementById('e_title').value.trim()||'Status Report';
+    b.author=document.getElementById('e_author').value.trim();
+    b.date=document.getElementById('e_date').value;
+    b.primary=document.getElementById('e_primary').value;
+    b.accent=document.getElementById('e_accent').value;
+    b.logo=editLogoData;
+    save(); applyBrand(); renderClients(); closeBrandModal();
+  }
+
+  /* ---------- Backup / restore ---------- */
+  function exportJSON(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='client-reports-backup.json'; a.click(); }
+  function importJSON(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
+    r.onload=()=>{ try{ const s=JSON.parse(r.result); if(Array.isArray(s.clients)){ s.clients.forEach(migrateClient); state=s; save(); goHome(); } else alert('Invalid backup file.'); }catch(err){alert('Invalid file.');} };
+    r.readAsText(f); e.target.value='';
+  }
+
+  /* ---------- helpers ---------- */
+  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
+  function fmtDate(s){ if(!s)return''; const d=new Date(s+'T00:00:00'); return d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
+
+  // fill static [data-ic] icon slots
+  function initIcons(){ document.querySelectorAll('[data-ic]').forEach(el=>{ el.insertAdjacentHTML('afterbegin', ic(el.dataset.ic, parseInt(el.dataset.icSize||'18',10))); }); }
+
+  // Esc closes modals
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeAgg(); closeBrandModal(); } });
+
+  // init
+  initIcons();
+  document.getElementById('tbBack').style.display='none';
+  document.getElementById('b_date').value = todayStr();
+  renderClients();
+</script>
+</body>
+</html>
