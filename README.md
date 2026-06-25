@@ -1,6 +1,6 @@
 # Client Status Reports
 
-A single-file, zero-dependency web app for creating **branded, dated client status reports** — no install, no backend. Just open `client-status-report.html` in any browser.
+A single-file, zero-dependency web app for creating **branded, dated client status reports** — no install, no backend. Just open `index.html` in any browser, or use the live GitHub Pages link.
 
 ## Features
 
@@ -17,12 +17,12 @@ A single-file, zero-dependency web app for creating **branded, dated client stat
 
 ## Usage
 
-1. Open `client-status-report.html` in a browser (double-click, or use a local server).
+1. Open `index.html` in a browser (double-click, or use a local server) — or visit the live GitHub Pages site.
 2. Fill in the **Client Branding** form and click **Create Client**.
 3. Open the client card and click **Generate Report** to add dated reports.
 4. Use the 🖨 button on a report to export it as a PDF.
 
-> **Tip:** To view it online, enable **GitHub Pages** (Settings → Pages → deploy from `main`). Pages serves `index.html` by default, so rename or copy the file to `index.html` if you want it at the site root.
+**Live site:** https://thelbertd.github.io/client-status-report/
 
 ## Tech
 

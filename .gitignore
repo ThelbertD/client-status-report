@@ -4,4 +4,4 @@
 # …except the status report app and its repo files
 !/.gitignore
 !/README.md
-!/client-status-report.html
+!/index.html
